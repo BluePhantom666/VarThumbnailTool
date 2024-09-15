@@ -1,5 +1,4 @@
 import sys
-import subprocess
 import os
 import zipfile
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QHBoxLayout, QVBoxLayout, QFileDialog, QMessageBox, \
@@ -46,7 +45,7 @@ class VarExtractor(QWidget):
         self.to_process = ''
 
         # Set the window properties
-        self.setWindowTitle('VAR EXTRACTOR')
+        self.setWindowTitle('VAR THUMBNAIL TOOL')
         self.setGeometry(100, 100, 900, 500)
         self.setStyleSheet("background-color: #f0f0f0;")
 
