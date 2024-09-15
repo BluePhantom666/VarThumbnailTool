@@ -97,13 +97,6 @@ class VarExtractor(QWidget):
 
         self.setLayout(vbox)
 
-    def play_success_beep(self):
-        """Plays a beep sound when an operation is successful based on the OS."""
-        if os.name == 'nt':  # For Windows
-            os.system('echo \a')
-        else:  # For Unix-based systems (Linux/macOS)
-            os.system('printf "\a"')
-            
     def extract_thumbnail(self,var_file_path, output_dir):
         # Ensure the file is a .var file
         if not var_file_path.endswith('.var'):
@@ -143,7 +136,6 @@ class VarExtractor(QWidget):
 
                         print(f"Thumbnail for {scene_name} extracted and saved as: {new_thumbnail_path}")
                         self.message_layout.addWidget(QLabel(f"Thumbnail for {scene_name} extracted and saved as: {new_thumbnail_path}", self))
-                        self.play_success_beep()
                     else:
                         self.message_layout.addWidget(QLabel(f"No thumbnail found for scene {scene_name} in {var_file_path}", self))
                         print(f"No thumbnail found for scene {scene_name} in {var_file_path}.")
