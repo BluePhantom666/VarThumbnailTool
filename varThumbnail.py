@@ -97,7 +97,7 @@ class VarExtractor(QWidget):
 
         self.setLayout(vbox)
 
-    def extract_thumbnail(self,var_file_path, output_dir):
+    def extract_thumbnail(self, var_file_path, output_dir):
         # Ensure the file is a .var file
         if not var_file_path.endswith('.var'):
             print(f"{var_file_path} is not a .var file.")
