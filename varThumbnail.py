@@ -1,8 +1,12 @@
 import sys
 import os
+import matplotlib.pyplot as plt
+import math
+from PIL import Image
 import zipfile
+import numpy as np
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QHBoxLayout, QVBoxLayout, QFileDialog, QMessageBox, \
-    QLabel, QScrollArea
+    QLabel, QScrollArea, QCheckBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 
@@ -43,7 +47,7 @@ class VarExtractor(QWidget):
         super().__init__()
         self.current_status = 0
         self.to_process = ''
-
+        
         # Set the window properties
         self.setWindowTitle('VAR THUMBNAIL TOOL')
         self.setGeometry(100, 100, 900, 500)
@@ -53,6 +57,10 @@ class VarExtractor(QWidget):
         self.dir_button = QPushButton('Choose Directory', self)
         self.file_button = QPushButton('Choose .var File', self)
         self.extract_button = QPushButton('Extract', self)
+
+        # Add a checkbox for creating a montage
+        self.imagegrid_box = QCheckBox("Create a montage after the extraction?")
+        self.imagegrid_box.setChecked(True)
 
         # Create label
         self.info_label = QLabel('Select a directory or a file', self)
@@ -91,6 +99,7 @@ class VarExtractor(QWidget):
         # Vertical layout to include buttons and label
         vbox = QVBoxLayout()
         vbox.addLayout(hbox)
+        vbox.addWidget(self.imagegrid_box)
         vbox.addWidget(self.info_label)
         vbox.addWidget(self.extract_button)
         vbox.addWidget(self.scroll_messages)
@@ -102,10 +111,13 @@ class VarExtractor(QWidget):
         if not var_file_path.endswith('.var'):
             print(f"{var_file_path} is not a .var file.")
             self.message_layout.addWidget(QLabel(f"{var_file_path} is not a .var file", self))
-            return
+            return None
 
         # Get the name of the var file without extension
         var_name = os.path.splitext(os.path.basename(var_file_path))[0]
+        
+        # Extract creator name from the var file name
+        creator_name = var_name.split('.')[0]
 
         # Open the var file (zip archive)
         with zipfile.ZipFile(var_file_path, 'r') as var_file:
@@ -128,14 +140,15 @@ class VarExtractor(QWidget):
                         os.makedirs(output_dir, exist_ok=True)
 
                         # Create the new thumbnail file path in the output directory
-                        new_thumbnail_path = os.path.join(output_dir, f"{scene_name}.jpg")
+                        new_thumbnail_path = os.path.join(output_dir, f"{var_name}.jpg")
 
                         # Write the thumbnail to the directory
                         with open(new_thumbnail_path, 'wb') as thumbnail_file:
                             thumbnail_file.write(thumbnail_data)
 
-                        print(f"Thumbnail for {scene_name} extracted and saved as: {new_thumbnail_path}")
-                        self.message_layout.addWidget(QLabel(f"Thumbnail for {scene_name} extracted and saved as: {new_thumbnail_path}", self))
+                        print(f"Thumbnail for {var_name} extracted and saved as: {new_thumbnail_path}")
+                        self.message_layout.addWidget(QLabel(f"Thumbnail for {var_name} extracted and saved as: {new_thumbnail_path}", self))
+                        return creator_name
                     else:
                         self.message_layout.addWidget(QLabel(f"No thumbnail found for scene {scene_name} in {var_file_path}", self))
                         print(f"No thumbnail found for scene {scene_name} in {var_file_path}.")
@@ -143,7 +156,71 @@ class VarExtractor(QWidget):
                 print(f"No scene files found in {var_file_path}.")
                 self.message_layout.addWidget(QLabel(f"No scene files found in {var_file_path}", self))
                 self.message_widget.setLayout(self.message_layout)
+        
+        return None
 
+    def imagegrid(self, output_dir, image_files, creator_name, grid_size=None):
+        if not image_files:
+            print(f"No images found for creator {creator_name}.")
+            self.message_layout.addWidget(QLabel(f"No images found for creator {creator_name}.", self))
+            return None
+
+        # Load all images into a list
+        list_images = [Image.open(os.path.join(output_dir, img)) for img in image_files]
+
+        # If grid size (rows, cols) is not provided, calculate it automatically
+        num_images = len(list_images)
+        if grid_size is None:
+            # Determine grid size automatically (square-like grid)
+            grid_cols = math.ceil(math.sqrt(num_images))  # Number of columns
+            grid_rows = math.ceil(num_images / grid_cols)  # Number of rows
+        else:
+            grid_rows, grid_cols = grid_size
+
+        # Create a matplotlib figure with increased size and DPI
+        fig, axs = plt.subplots(grid_rows + 1, grid_cols, figsize=(grid_cols * 4, (grid_rows + 1) * 4), dpi=300)
+    
+        # Flatten axs array for easy indexing (in case of multiple subplots)
+        axs = axs.flatten() if isinstance(axs, np.ndarray) else [axs]
+
+        # Turn off axes for all subplots
+        for ax in axs:
+            ax.axis('off')
+    
+        # Add creator name at the top
+        fig.suptitle(f"Creator: {creator_name}", fontsize=14, y=0.99)
+    
+        # Add each image to the grid
+        for i, (img, img_file) in enumerate(zip(list_images, image_files)):
+            axs[i + grid_cols].imshow(img)  # Start from the second row
+            axs[i + grid_cols].set_title(os.path.splitext(img_file)[0], fontsize=8)  # Add thumbnail name
+            
+        # Remove empty subplots (if any)
+        for j in range(i + grid_cols + 1, len(axs)):
+            fig.delaxes(axs[j])
+    
+        # Adjust spacing between images
+        plt.subplots_adjust(wspace=0.05, hspace=0.2)
+    
+        # Save the final grid image with high quality
+        grid_path = os.path.join(output_dir, f'grid_{creator_name}.jpg')
+        plt.savefig(grid_path, bbox_inches='tight', pad_inches=0.1)
+        plt.close()  # Close the figure to free up memory
+
+        print(f"Image grid for {creator_name} created and saved as: {grid_path}")
+        self.message_layout.addWidget(QLabel(f"Image grid for {creator_name} created and saved as: {grid_path}", self))
+        return grid_path
+
+    def group_thumbnails_by_creator(self, output_dir):
+        creator_thumbnails = {}
+        for file in os.listdir(output_dir):
+            if file.lower().endswith('.jpg') and file != 'grid.jpg':
+                creator_name = file.split('.')[0]
+                if creator_name not in creator_thumbnails:
+                    creator_thumbnails[creator_name] = []
+                creator_thumbnails[creator_name].append(file)
+        return creator_thumbnails
+        
     def process_var_files_recursively(self, directory_path, output_dir):
         # Walk through the directory and its subdirectories
         for root, dirs, files in os.walk(directory_path):
@@ -166,8 +243,6 @@ class VarExtractor(QWidget):
             self.current_status = 2
             self.to_process = directory
 
-
-
     def choose_var_file(self):
         file_name, _ = QFileDialog.getOpenFileName(self, 'Select .var File', '', 'VAR Files (*.var)')
         if file_name:
@@ -175,14 +250,18 @@ class VarExtractor(QWidget):
             self.current_status = 1
             self.to_process = file_name
 
-
     def extract(self):
         target = self.choose_directory_('Choose where to extract')
-        if self.current_status == 1:
-            self.extract_thumbnail(self.to_process, target)
-        elif self.current_status == 2:
-            self.process_var_files_recursively(self.to_process, target)
-
+        if target:
+            if self.current_status == 1:  # Single file processing
+                self.extract_thumbnail(self.to_process, target)
+            elif self.current_status == 2:  # Directory processing
+                self.process_var_files_recursively(self.to_process, target)                
+                # Generate image grid only for directory processing and if checkbox is checked
+                if self.imagegrid_box.isChecked():
+                    creator_thumbnails = self.group_thumbnails_by_creator(target)
+                    for creator, thumbnails in creator_thumbnails.items():
+                        self.imagegrid(target, thumbnails, creator)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
